@@ -1,0 +1,211 @@
+{
+  "name": "Elevenlabs real estate Booking agent tool",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "829c0f7b-9464-4e68-bdcc-3d30636836ef",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        384,
+        0
+      ],
+      "id": "9529bb0d-41f7-4bec-ace0-8b6c11475a57",
+      "name": "Webhook",
+      "webhookId": "829c0f7b-9464-4e68-bdcc-3d30636836ef"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.output }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1008,
+        0
+      ],
+      "id": "50847581-023b-414a-a1ac-436f0c47e056",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        640,
+        208
+      ],
+      "id": "fbac53ad-0a65-4631-9944-7c3233ff8a66",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "LAEkktW2n0uh09hf",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=here's the summary: {{ $json.body.summary }}",
+        "options": {
+          "systemMessage": "=You are an intelligent Booking Assistant powering an ElevenLabs conversational agent.\n\n**Your Input:**\nYou will receive a **Summary of Intent** based on a conversation with a customer.\n- **If the intent is 'Check Availability':** The summary will contain a desired time/date.\n- **If the intent is 'Book Appointment':** The summary will contain the service description (\"about\"), time and date, customer name, and customer email.\n\n**Current Context:**\nThe current date and time is: {{ $now }}\nThe Summary of Intent is: {{ $json.body.summary }}\n\n**Your Tools:**\n1. `check_availability(desired_time, service)`: Checks if a slot is free and returns alternatives if not.\n2. `book_appointment(time, service, customer_name, customer_email)`: Finalizes the booking.\n\n**Instructions:**\n\n**Step 1: Analyze the Summary**\nDetermine if the customer wants to **Check Availability** or **Book an Appointment** based on the provided summary.\n\n**Step 2: Execute Logic**\n\n* **Scenario A: The Summary indicates 'Check Availability'**\n    * Call `check_availability` using the time/date provided in the summary.\n    * Respond to the user with the status (e.g., \"That time is available\" or \"That time is taken, but [Time X] is open\").\n\n* **Scenario B: The Summary indicates 'Book Appointment'**\n    * **Action 1:** IMMEDIATE safety check. Call `check_availability` for the requested time first.\n    * **Action 2 (If Available):** Call `book_appointment` using the name, email, time, and service details from the summary.\n    * **Action 3 (If Unavailable):** Do NOT book. Respond stating the slot is taken and offer the alternatives returned by the availability check.\n\n**Step 3: Handling Missing Data**\nIf the summary indicates an intent to book but is missing the **Name** or **Email**, do not call the booking tool. Instead, respond by asking the user for the missing details.\n\n**Step 4: Final Response**\nGenerate a natural, polite spoken response for the ElevenLabs voice:\n- If booked: \"Great, [Name]. I've confirmed your appointment for [Service] at [Time].\"\n- If checking: \"I've checked our schedule...\""
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        656,
+        0
+      ],
+      "id": "8ff8e59a-22c2-4055-93aa-01f70e53b516",
+      "name": "Booking Agent"
+    },
+    {
+      "parameters": {
+        "resource": "calendar",
+        "calendar": {
+          "__rl": true,
+          "value": "buchinnamani208@gmail.com",
+          "mode": "list",
+          "cachedResultName": "buchinnamani208@gmail.com"
+        },
+        "timeMin": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Start_Time', `check from specific time requested`, 'string') }}",
+        "timeMax": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('End_Time', `To at least 2 hours after `, 'string') }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        1040,
+        192
+      ],
+      "id": "2dc6fd8d-dbf5-4d7f-a6b5-e7bf4b3f30f3",
+      "name": "check availability",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "GS2JZb6F6aTCm0t1",
+          "name": "n8n google calendar revised oauth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "value": "buchinnamani208@gmail.com",
+          "mode": "list",
+          "cachedResultName": "buchinnamani208@gmail.com"
+        },
+        "start": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Start', `event starts at the time specified`, 'string') }}",
+        "end": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('End', `event should last for one hour`, 'string') }}",
+        "additionalFields": {
+          "attendees": [
+            "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('attendees0_Attendees', `the attendees for the appointment`, 'string') }}"
+          ],
+          "conferenceDataUi": {
+            "conferenceDataValues": {
+              "conferenceSolution": "hangoutsMeet"
+            }
+          },
+          "description": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Description', `what the booking is about`, 'string') }}",
+          "location": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Location', `the location`, 'string') }}",
+          "summary": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Summary', `the summary in two words`, 'string') }}"
+        }
+      },
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        880,
+        208
+      ],
+      "id": "8bb6625b-f9a6-4a9e-be65-95c1b49ffe79",
+      "name": "Book appointment",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "GS2JZb6F6aTCm0t1",
+          "name": "n8n google calendar revised oauth"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Booking Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Booking Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Booking Agent": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check availability": {
+      "ai_tool": [
+        [
+          {
+            "node": "Booking Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Book appointment": {
+      "ai_tool": [
+        [
+          {
+            "node": "Booking Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Lagos",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "8f859eac-5545-406a-b39b-7e4b6bf002f0",
+  "meta": {
+    "instanceId": "99d3d0b58121e0db505455c8baa12ef29cc6a6ca4e101cf705c0811ae247979f"
+  },
+  "id": "jHR5f3SkZnFD5r3a",
+  "tags": []
+}

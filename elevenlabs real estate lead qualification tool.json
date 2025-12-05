@@ -1,0 +1,352 @@
+{
+  "name": "elevenlabs real estate lead qualification tool",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "9821bce1-b227-432a-b9e9-337a6e19f243",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -368,
+        0
+      ],
+      "id": "69bfbc51-79c7-4f18-b4c8-fdd72686dff3",
+      "name": "Webhook",
+      "webhookId": "9821bce1-b227-432a-b9e9-337a6e19f243"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=This is the transcript {{ $json.transcript }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are an evaluation assistant whose job is to analyze a call transcript or a call summary (from either inbound or outbound calls) and determine whether the lead is qualified based on the information provided.\n\nYour output must be clear, concise, and based strictly on the evidence in the transcript or summary.\n\nWHAT YOU MUST DO\n\nRead the full transcript or summary.\n\nIdentify the lead’s needs, intent, budget, authority, timeline, and fit for the offer (use what is available; do not assume).\n\nDetermine if the lead is Qualified, Not Qualified, or Unclear based on evidence.\n\nExplain briefly why you reached this conclusion.\n\nHighlight missing information if something essential was not discussed.\n\nQUALIFICATION CRITERIA\n\nA lead is considered Qualified if they satisfy most of the following (adapt wording for your use case):\n\nNeed: They have a clear problem or goal the product/service solves.\n\nInterest: They express interest, urgency, or willingness to proceed.\n\nBudget: They have the ability or intent to pay.\n\nAuthority: They are the decision-maker, or can bring one in.\n\nTimeline: They have a specific timeframe to start.\n\nA lead is Not Qualified if:\n\nThey have no need.\n\nThey are not interested or not a good fit.\n\nThey cannot pay or refuse pricing.\n\nThey lack authority and cannot escalate.\n\nTheir timeline is too far out or nonexistent.\n\nA lead is Unclear if:\n\nThe transcript does not provide enough information to evaluate qualification.\n\nOUTPUT FORMAT (STRICT)\n\n**Return exactly a JSON array with 5 objects, in this order:**  \n\n[\n  {\n    \"Qualification\": \"\"\n  },\n  {\n    \"Summary of Evidence\": {\n      \"Need\": \"\",\n      \"Interest\": \"\",\n      \"Budget\": \"\",\n      \"Authority\": \"\",\n      \"Timeline\": \"\",\n      \"Fit\": \"\"\n    }\n  },\n  {\n    \"Missing Information\": []\n  },\n  {\n    \"Reasoning\": \"\"\n  },\n  {\n    \"Recommended Next Step\": \"\"\n  }\n]\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        480,
+        0
+      ],
+      "id": "d8668079-4111-4c22-97d9-e2202fe6f741",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        416,
+        192
+      ],
+      "id": "e6316bae-9bdc-476d-acc6-45b62c8203e8",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "6EALfqIaaRVTnlrE",
+          "name": "Google Gemini(PaLM) Api account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "body.data.transcript",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        -144,
+        0
+      ],
+      "id": "d4ce3b5a-546e-4534-8e8a-ed0d32e3ca74",
+      "name": "Split Out"
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "transcript",
+        "include": "specifiedFields",
+        "fieldsToInclude": "message, original_message",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        64,
+        0
+      ],
+      "id": "7d9c3745-c759-470d-87e5-1418a6b5c9db",
+      "name": "Aggregate"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "30559b7a-49c1-4dd7-a3cc-0671fe77877b",
+              "name": "=transcript",
+              "value": "={{ $json.transcript }}",
+              "type": "string"
+            },
+            {
+              "id": "c664c952-9839-4c29-bf6f-d62c1c8ea1ce",
+              "name": "customer contact info",
+              "value": "={{ $('Webhook').item.json.body.data.conversation_initiation_client_data.dynamic_variables.system__caller_id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        272,
+        0
+      ],
+      "id": "8ad803fb-c207-42c9-a902-87aead56b6f5",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\n// This Code node takes the agent's output, extracts the inner JSON array,\n// and merges all objects within that array into a single output item.\n\nconst input = $input.all();\n\nif (!input.length) {\n\treturn [];\n}\n\n// We'll accumulate output items here\nconst result = [];\n\nfor (const item of input) {\n\tconst raw = item.json.output;\n\n\tif (typeof raw !== 'string') {\n\t\t// skip non-string inputs\n\t\tcontinue;\n\t}\n\n\t// 1. Extract JSON within ```json ... ``` (or fallback to raw)\n\tlet jsonString = raw;\n\tconst fenced = raw.match(/```json\\s*([\\s\\S]*?)```/);\n\tif (fenced) {\n\t\tjsonString = fenced[1].trim(); // trim whitespace\n\t}\n\n\tlet arr;\n\ttry {\n\t\t// 2. Parse the extracted JSON string into an array of objects\n\t\tarr = JSON.parse(jsonString);\n\t} catch (e) {\n\t\tthrow new Error(`Could not parse JSON from agent output: ${e.message}`);\n\t}\n\n\tif (!Array.isArray(arr)) {\n\t\tthrow new Error('Parsed data is not an array');\n\t}\n\n\t// 3. MERGE all objects in the array 'arr' into a single object\n\t// This is the key change to eliminate 'undefined' cells.\n\tconst mergedData = arr.reduce((accumulator, currentObject) => {\n\t\t// Use the spread operator to combine the accumulator and the current object\n\t\treturn { ...accumulator, ...currentObject };\n\t}, {}); // Initialize the accumulator as an empty object\n\n\t// 4. Push the single merged object as ONE output item\n\t// This ensures that all data properties are present on the same item.\n\tif (Object.keys(mergedData).length > 0) {\n\t\tresult.push({ json: mergedData });\n\t}\n}\n\nreturn result;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        848,
+        0
+      ],
+      "id": "61f31b81-97c0-4e73-8f8c-01ad46452519",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "18K3A_xkAziUWP39Y6S9RFGvxtP_v-IQnPzLwc-h1lTQ",
+          "mode": "list",
+          "cachedResultName": "Lead data all",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/18K3A_xkAziUWP39Y6S9RFGvxtP_v-IQnPzLwc-h1lTQ/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1806479958,
+          "mode": "list",
+          "cachedResultName": "elevenlabs Real Estate lead qualification",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/18K3A_xkAziUWP39Y6S9RFGvxtP_v-IQnPzLwc-h1lTQ/edit#gid=1806479958"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "qualification": "={{ $json.Qualification }}",
+            "summary of Evidence": "={{ $json['Summary of Evidence'] }}",
+            "missing information": "={{ $json['Missing Information'] }}",
+            "reasoning": "={{ $json.Reasoning }}",
+            "recommended next step": "={{ $json['Recommended Next Step'] }}",
+            "lead name": "={{ $('Webhook').item.json.body.data.analysis.data_collection_results.name.value }}",
+            "lead email": "={{ $('Webhook').item.json.body.data.analysis.data_collection_results.email.value }}",
+            "lead phone number": "={{ $('Webhook').item.json.body.data.conversation_initiation_client_data.dynamic_variables.system__caller_id }}"
+          },
+          "matchingColumns": [
+            "lead phone number"
+          ],
+          "schema": [
+            {
+              "id": "lead phone number",
+              "displayName": "lead phone number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "lead name",
+              "displayName": "lead name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "lead email",
+              "displayName": "lead email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "qualification",
+              "displayName": "qualification",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "summary of Evidence",
+              "displayName": "summary of Evidence",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "missing information",
+              "displayName": "missing information",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "reasoning",
+              "displayName": "reasoning",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "recommended next step",
+              "displayName": "recommended next step",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1104,
+        0
+      ],
+      "id": "b507fb04-0522-4749-99e1-9d09fd1b62c9",
+      "name": "Append or update lead qualification",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "l9Qp2zYDgKXuTy6Q",
+          "name": "Google Sheets account 4"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Append or update lead qualification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "043dd4b9-6188-45a0-af0b-530c87258810",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "99d3d0b58121e0db505455c8baa12ef29cc6a6ca4e101cf705c0811ae247979f"
+  },
+  "id": "xMcsUcgHDeaYTGLJ",
+  "tags": []
+}
